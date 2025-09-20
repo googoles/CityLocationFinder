@@ -40,6 +40,30 @@
                 <span id="sensorText">Compass sensor</span>
                 <div class="sensor-info" id="sensorInfo">Initializing sensors...</div>
             </div>
+            <div id="debug-panel" style="display: none; font-size: 10px; background: rgba(0,0,0,0.2); padding: 5px; border-radius: 5px; margin-top: 5px; max-height: 150px; overflow-y: auto; color: white;">
+                <p><strong>Sensor Debug Info:</strong> (click to hide)</p>
+                <div id="debug-content">
+                    <h4 style="margin-top:0.75rem; font-size: 12px; font-weight: bold;">Orientation</h4>
+                    <ul style="list-style: none; padding-left: 10px; margin-bottom: 5px;">
+                      <li>&beta; (X-axis): <span id="Orientation_b">0</span>&deg;</li>
+                      <li>&gamma; (Y-axis): <span id="Orientation_g">0</span>&deg;</li>
+                      <li>&alpha; (Z-axis): <span id="Orientation_a">0</span>&deg;</li>
+                    </ul>
+
+                    <h4 style="margin-top:0.75rem; font-size: 12px; font-weight: bold;">Gyroscope</h4>
+                    <ul style="list-style: none; padding-left: 10px; margin-bottom: 5px;">
+                      <li>X-axis: <span id="Gyroscope_x">0</span>&deg;/s</li>
+                      <li>Y-axis: <span id="Gyroscope_y">0</span>&deg;/s</li>
+                      <li>Z-axis: <span id="Gyroscope_z">0</span>&deg;/s</li>
+                    </ul>
+
+                    <h4 style="margin-top:0.75rem; font-size: 12px; font-weight: bold;">Status</h4>
+                    <ul style="list-style: none; padding-left: 10px; margin-bottom: 5px;">
+                        <li>Sensor: <span id="sensor_type">N/A</span></li>
+                        <li>Status: <span id="sensor_status"></span></li>
+                    </ul>
+                </div>
+            </div>
         </div>
 
         <div class="location-selector">
@@ -76,54 +100,13 @@
             </div>
         </div>
 
-        <div class="orientation-panel">
-            <div class="orientation-item">
-                <div class="orientation-label">&alpha; (Z)</div>
-                <div class="orientation-value" id="orientation-alpha">--</div>
-            </div>
-            <div class="orientation-item">
-                <div class="orientation-label">&beta; (X)</div>
-                <div class="orientation-value" id="orientation-beta">--</div>
-            </div>
-            <div class="orientation-item">
-                <div class="orientation-label">&gamma; (Y)</div>
-                <div class="orientation-value" id="orientation-gamma">--</div>
-            </div>
-        </div>
-
         <div class="status" id="status">Allow location permission and select a city</div>
     </div>
 
-    <div id="debug-panel">
-        <p><strong>Sensor Debug Info:</strong> (click compass info to hide)</p>
-        <div id="debug-content">
-            <h4 style="margin-top:0.75rem; font-size: 12px; font-weight: bold;">Gyroscope</h4>
-            <ul style="list-style: none; padding-left: 10px; margin-bottom: 5px;">
-              <li>X-axis: <span id="Gyroscope_x">0</span>&deg;/s</li>
-              <li>Y-axis: <span id="Gyroscope_y">0</span>&deg;/s</li>
-              <li>Z-axis: <span id="Gyroscope_z">0</span>&deg;/s</li>
-            </ul>
-
-            <h4 style="margin-top:0.75rem; font-size: 12px; font-weight: bold;">Status</h4>
-            <ul style="list-style: none; padding-left: 10px; margin-bottom: 5px;">
-                <li>Sensor: <span id="sensor_type">N/A</span></li>
-                <li>Status: <span id="sensor_status"></span></li>
-            </ul>
-
-            <h4 style="margin-top:0.75rem; font-size: 12px; font-weight: bold;">Orientation</h4>
-                                <ul style="list-style: none; padding-left: 10px; margin-bottom: 5px;">
-                                  <li>&beta; (X-axis): <span id="Orientation_b">0</span>&deg;</li>
-                                  <li>&gamma; (Y-axis): <span id="Orientation_g">0</span>&deg;</li>
-                                  <li>&alpha; (Z-axis): <span id="Orientation_a">0</span>&deg;</li>
-                                  <li>Source: <span id="orientation_source">N/A</span></li>
-                                  <li>Heading: <span id="orientation_heading">0</span>&deg;</li>
-                                </ul>        </div>
-    </div>
-
     <script src="js/data.js"></script>
-    <script src="js/ui.js"></script>
     <script src="js/compass.js"></script>
     <script src="js/location.js"></script>
+    <script src="js/ui.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

@@ -97,3 +97,12 @@ function getDirectionText(bearing) {
     const index = Math.round(bearing / 22.5) % 16;
     return t.directionsText[index];
 }
+
+function toggleDebugPanel() {
+    const debugPanel = document.getElementById('debug-panel');
+    if (debugPanel.style.display === 'none') {
+        debugPanel.style.display = 'block';
+    } else {
+        debugPanel.style.display = 'none';
+    }
+}

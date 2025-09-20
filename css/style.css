@@ -233,6 +233,27 @@ h1 {
     font-weight: bold;
 }
 
+.orientation-panel {
+    display: flex;
+    justify-content: space-around;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    padding: 15px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.orientation-label {
+    font-size: 12px;
+    opacity: 0.8;
+    margin-bottom: 5px;
+}
+
+.orientation-value {
+    font-size: 20px;
+    font-weight: bold;
+}
+
 .location-selector {
     margin-bottom: 20px;
 }
@@ -352,4 +373,20 @@ button:disabled {
     0% { opacity: 1; }
     50% { opacity: 0.5; }
     100% { opacity: 1; }
+}
+
+#debug-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    z-index: 100;
+    display: none; 
+    font-size: 10px; 
+    background: rgba(0,0,0,0.5);
+    padding: 10px;
+    max-height: 150px; 
+    overflow-y: auto; 
+    color: white;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
 }

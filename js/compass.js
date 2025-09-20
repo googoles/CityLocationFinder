@@ -62,24 +62,38 @@ function initializeDeviceOrientation() {
         return;
     }
     
+    // Fallback to legacy DeviceOrientation/DeviceMotionEvent
     if ('DeviceOrientationEvent' in window) {
-        if (typeof DeviceOrientationEvent.requestPermission === 'function' || typeof DeviceMotionEvent.requestPermission === 'function') {
-            Promise.all([
-                typeof DeviceOrientationEvent.requestPermission === 'function' ? DeviceOrientationEvent.requestPermission() : Promise.resolve('granted'),
-                typeof DeviceMotionEvent.requestPermission === 'function' ? DeviceMotionEvent.requestPermission() : Promise.resolve('granted')
-            ]).then(responses => {
-                const orientationGranted = responses[0] === 'granted';
-                const motionGranted = responses[1] === 'granted';
-
-                if (orientationGranted) {
-                    startDeviceOrientationCompass(motionGranted);
-                } else {
-                    updateSensorStatus(false, 'Permission denied', 'Compass permission was denied. Please allow sensor access in browser settings.');
-                }
-            }).catch((error) => {
-                updateSensorStatus(false, 'Permission error', `Failed to request sensor permission: ${error.message}`);
-            });
+        // This is the modern way for iOS 13+ and other privacy-conscious browsers
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+            DeviceOrientationEvent.requestPermission()
+                .then(orientationResponse => {
+                    if (orientationResponse === 'granted') {
+                        // Orientation permission granted, now check for motion
+                        if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                            DeviceMotionEvent.requestPermission()
+                                .then(motionResponse => {
+                                    // Start with motion permission status
+                                    startDeviceOrientationCompass(motionResponse === 'granted');
+                                })
+                                .catch(error => {
+                                    // Failed to get motion permission, start without it
+                                    console.error('DeviceMotionEvent.requestPermission error:', error);
+                                    startDeviceOrientationCompass(false);
+                                });
+                        } else {
+                            // Motion permission not needed
+                            startDeviceOrientationCompass(true);
+                        }
+                    } else {
+                        updateSensorStatus(false, 'Permission denied', 'Compass permission was denied.');
+                    }
+                })
+                .catch(error => {
+                    updateSensorStatus(false, 'Permission error', `Failed to request sensor permission: ${error.message}`);
+                });
         } else {
+            // This is for Android and older iOS devices that don't need explicit permission requests
             startDeviceOrientationCompass(true);
         }
     } else {
@@ -145,6 +159,14 @@ function startAbsoluteOrientationSensor() {
         deviceOrientation = (360 - yaw) % 360;
         
         updateCompassRotation();
+
+        Object.assign(debugInfo, {
+            source: 'AbsoluteOrientationSensor',
+            yaw: yaw,
+            deviceOrientation: deviceOrientation,
+            quaternion: absoluteOrientationSensor.quaternion
+        });
+        updateDebugInfo();
     };
 
     absoluteOrientationSensor.start();
@@ -158,17 +180,17 @@ function startMagnetometerGyroscope() {
 
     // Initialize magnetometer for compass heading
     if ('Magnetometer' in window) {
-        magnetometer = new Magnetometer({ 
+        magnetometer = new Magnetometer({
             frequency: 60,
             referenceFrame: 'screen'
         });
 
         magnetometer.onerror = (event) => {
             console.log('Magnetometer error:', event.error);
-            const errorMsg = event.error.name === 'NotAllowedError' ? 
-                'Magnetometer permission denied' : 
-                event.error.name === 'NotReadableError' ? 
-                'Magnetometer not available' : 
+            const errorMsg = event.error.name === 'NotAllowedError' ?
+                'Magnetometer permission denied' :
+                event.error.name === 'NotReadableError' ?
+                'Magnetometer not available' :
                 `Magnetometer error: ${event.error.name}`;
             
             updateSensorStatus(false, 'Magnetometer error', `${errorMsg}. Trying legacy fallback...`);
@@ -178,6 +200,21 @@ function startMagnetometerGyroscope() {
             // Calculate compass heading from magnetometer
             magHeading = Math.atan2(magnetometer.y, magnetometer.x) * 180 / Math.PI;
             magHeading = (360 + magHeading) % 360;
+
+            // If not using gyro, or if gyro hasn't started, update directly
+            if (!gyroscope || lastTimestamp === null) {
+                deviceOrientation = magHeading;
+                updateCompassRotation();
+            }
+
+            Object.assign(debugInfo, {
+                source_mag: 'Magnetometer',
+                mag_x: magnetometer.x,
+                mag_y: magnetometer.y,
+                mag_z: magnetometer.z,
+                magHeading: magHeading
+            });
+            updateDebugInfo();
         };
 
         magnetometer.start();
@@ -187,7 +224,7 @@ function startMagnetometerGyroscope() {
 
     // Initialize gyroscope for smooth rotation
     if ('Gyroscope' in window) {
-        gyroscope = new Gyroscope({ 
+        gyroscope = new Gyroscope({
             frequency: 60,
             referenceFrame: 'screen'
         });
@@ -215,6 +252,15 @@ function startMagnetometerGyroscope() {
                 }
                 
                 updateCompassRotation();
+
+                Object.assign(debugInfo, {
+                    source_gyro: 'Gyroscope',
+                    gyro_x: gyroscope.x,
+                    gyro_y: gyroscope.y,
+                    gyro_z: gyroscope.z,
+                    deviceOrientation: deviceOrientation
+                });
+                updateDebugInfo();
             }
             lastTimestamp = gyroscope.timestamp;
         };
@@ -227,7 +273,6 @@ function startMagnetometerGyroscope() {
         }
     }
 }
-
 function tryMagnetometerGyroscope() {
     try {
         startMagnetometerGyroscope();
@@ -272,8 +317,31 @@ function handleMotion(event) {
                 deviceOrientation = (deviceOrientation + gyroRotation) % 360;
             }
             updateCompassRotation();
+
+            Object.assign(debugInfo, {
+                source_motion: 'DeviceMotionEvent',
+                rotationRate: event.rotationRate,
+                deviceOrientation: deviceOrientation
+            });
+            updateDebugInfo();
         }
         lastMotionTimestamp = event.timeStamp;
+    }
+}
+
+function updateOrientationDisplay(alpha, beta, gamma) {
+    const alphaEl = document.getElementById('orientation-alpha');
+    const betaEl = document.getElementById('orientation-beta');
+    const gammaEl = document.getElementById('orientation-gamma');
+
+    if (alphaEl && typeof alpha === 'number') {
+        alphaEl.textContent = `${alpha.toFixed(1)}°`;
+    }
+    if (betaEl && typeof beta === 'number') {
+        betaEl.textContent = `${beta.toFixed(1)}°`;
+    }
+    if (gammaEl && typeof gamma === 'number') {
+        gammaEl.textContent = `${gamma.toFixed(1)}°`;
     }
 }
 
@@ -289,11 +357,23 @@ function handleOrientation(event) {
             orientationAlpha = 360 - compass;
         }
         
-        // If not using motion fusion, set orientation directly
-        if (!useMotion) {
+        // If not using motion fusion, or if motion hasn't started, set orientation directly
+        if (!useMotion || lastMotionTimestamp === null) {
              deviceOrientation = orientationAlpha;
              updateCompassRotation();
         }
+
+        updateOrientationDisplay(event.alpha, event.beta, event.gamma);
+
+        Object.assign(debugInfo, {
+            source_orientation: 'DeviceOrientationEvent',
+            webkitCompassHeading: event.webkitCompassHeading,
+            alpha: event.alpha,
+            beta: event.beta,
+            gamma: event.gamma,
+            orientationAlpha: orientationAlpha
+        });
+        updateDebugInfo();
     }
 }
 
@@ -319,6 +399,9 @@ function stopAllSensors() {
     window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
     window.removeEventListener('deviceorientation', handleOrientation, true);
     window.removeEventListener('devicemotion', handleMotion, true);
+
+    debugInfo = {};
+    updateDebugInfo();
 }
 
 function updateCompassRotation() {
@@ -389,4 +472,62 @@ ${detailText}`);
     }
     
     compassSupported = active;
+
+    Object.assign(debugInfo, {
+        sensorStatus: {
+            active: active,
+            status: statusText,
+            details: detailText,
+            type: sensorType
+        }
+    });
+    updateDebugInfo();
+}
+
+function updateFieldIfNotNull(fieldName, value, precision = 2) {
+    const field = document.getElementById(fieldName);
+    if (field && value !== null && value !== undefined) {
+        field.innerHTML = value.toFixed(precision);
+    }
+}
+
+function updateDebugInfo() {
+    if (document.getElementById('debug-panel').style.display === 'none') return;
+
+    // From DeviceOrientationEvent
+    if (debugInfo.source_orientation) {
+        updateFieldIfNotNull('Orientation_a', debugInfo.alpha);
+        updateFieldIfNotNull('Orientation_b', debugInfo.beta);
+        updateFieldIfNotNull('Orientation_g', debugInfo.gamma);
+    }
+
+    // From DeviceMotionEvent
+    if (debugInfo.source_motion && debugInfo.rotationRate) {
+        updateFieldIfNotNull('Gyroscope_z', debugInfo.rotationRate.alpha);
+        updateFieldIfNotNull('Gyroscope_x', debugInfo.rotationRate.beta);
+        updateFieldIfNotNull('Gyroscope_y', debugInfo.rotationRate.gamma);
+    }
+
+    // From Generic Gyroscope Sensor
+    if (debugInfo.source_gyro) {
+        updateFieldIfNotNull('Gyroscope_x', debugInfo.gyro_x);
+        updateFieldIfNotNull('Gyroscope_y', debugInfo.gyro_y);
+        updateFieldIfNotNull('Gyroscope_z', debugInfo.gyro_z);
+    }
+
+    // Status
+    if (debugInfo.sensorStatus) {
+        const sensorTypeEl = document.getElementById('sensor_type');
+        if (sensorTypeEl) sensorTypeEl.textContent = debugInfo.sensorStatus.type;
+        
+        const sensorStatusEl = document.getElementById('sensor_status');
+        if (sensorStatusEl) sensorStatusEl.textContent = debugInfo.sensorStatus.status;
+    }
+
+    // Orientation Status
+    const sourceEl = document.getElementById('orientation_source');
+    if (sourceEl) {
+        sourceEl.textContent = sensorType;
+    }
+    updateFieldIfNotNull('orientation_heading', deviceOrientation);
 }
