@@ -1,0 +1,355 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 20px;
+    color: white;
+}
+
+.container {
+    max-width: 400px;
+    margin: 0 auto;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 30px;
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.language-selector {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.lang-btn {
+    padding: 8px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.3s;
+}
+
+.lang-btn.active {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.8);
+    font-weight: bold;
+}
+
+.lang-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+h1 {
+    text-align: center;
+    margin-bottom: 30px;
+    font-size: 24px;
+    font-weight: 300;
+}
+
+.compass-container {
+    position: relative;
+    margin: 0 auto 30px;
+    width: 280px;
+    height: 280px;
+}
+
+.compass {
+    width: 280px;
+    height: 280px;
+    position: relative;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+    background: linear-gradient(45deg, #2c3e50, #3498db);
+    transition: transform 0.3s ease;
+}
+
+.compass-face {
+    width: 250px;
+    height: 250px;
+    background: radial-gradient(circle at center, #ecf0f1 0%, #bdc3c7 100%);
+    border-radius: 50%;
+    position: relative;
+    box-shadow: inset 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+.compass-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+}
+
+.degree-mark {
+    position: absolute;
+    width: 2px;
+    background: #34495e;
+    transform-origin: bottom center;
+    left: 50%;
+    top: 5px;
+}
+
+.degree-mark.major {
+    height: 20px;
+    width: 3px;
+    background: #2c3e50;
+    margin-left: -1.5px;
+}
+
+.degree-mark.minor {
+    height: 10px;
+    margin-left: -1px;
+}
+
+.direction-labels {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+}
+
+.direction-label {
+    position: absolute;
+    font-weight: bold;
+    font-size: 20px;
+    color: #2c3e50;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+.direction-label.n { top: 15px; left: 50%; transform: translateX(-50%); }
+.direction-label.e { right: 15px; top: 50%; transform: translateY(-50%); }
+.direction-label.s { bottom: 15px; left: 50%; transform: translateX(-50%); }
+.direction-label.w { left: 15px; top: 50%; transform: translateY(-50%); }
+
+.compass-needle {
+    position: absolute;
+    width: 6px;
+    height: 100px;
+    top: 50%;
+    left: 50%;
+    transform-origin: center bottom;
+    transform: translate(-50%, -100%);
+    transition: transform 0.5s ease;
+    z-index: 10;
+}
+
+.needle-north {
+    width: 100%;
+    height: 60%;
+    background: linear-gradient(to top, #e74c3c, #c0392b);
+    border-radius: 3px 3px 0 0;
+    position: relative;
+}
+
+.needle-north::before {
+    display: none;
+}
+
+.needle-south {
+    width: 100%;
+    height: 40%;
+    background: linear-gradient(to bottom, #95a5a6, #7f8c8d);
+    border-radius: 0 0 3px 3px;
+}
+
+.center-pin {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    background: radial-gradient(circle, #34495e 0%, #2c3e50 100%);
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 20;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.target-indicator {
+    position: absolute;
+    width: 4px;
+    height: 80px;
+    background: linear-gradient(to top, #f39c12, #e67e22);
+    top: 50%;
+    left: 50%;
+    transform-origin: center bottom;
+    transform: translate(-50%, -100%);
+    border-radius: 2px;
+    opacity: 0;
+    transition: all 0.5s ease;
+    z-index: 5;
+}
+
+.target-indicator.active {
+    opacity: 1;
+}
+
+.target-indicator::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: -6px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 12px solid #e67e22;
+}
+
+.info-panel {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    padding: 20px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.info-item {
+    margin-bottom: 15px;
+}
+
+.info-label {
+    font-size: 14px;
+    opacity: 0.8;
+    margin-bottom: 5px;
+}
+
+.info-value {
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.location-selector {
+    margin-bottom: 20px;
+}
+
+.country-row, .city-row {
+    margin-bottom: 10px;
+}
+
+.country-row select, .city-row select {
+    width: 100%;
+}
+
+select, button {
+    padding: 15px;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    backdrop-filter: blur(5px);
+}
+
+select {
+    flex: none;
+    width: 100%;
+}
+
+select option {
+    background: #333;
+    color: white;
+}
+
+button {
+    width: 100%;
+    background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+    cursor: pointer;
+    font-weight: bold;
+    transition: transform 0.2s;
+}
+
+button:hover {
+    transform: translateY(-2px);
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.status {
+    text-align: center;
+    margin-top: 15px;
+    font-size: 14px;
+    opacity: 0.8;
+}
+
+.loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255,255,255,.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.custom-location {
+    display: none;
+    margin-top: 10px;
+    gap: 10px;
+}
+
+.custom-location.show {
+    display: flex;
+}
+
+.custom-location input {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    backdrop-filter: blur(5px);
+}
+
+.custom-location input::placeholder {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.sensor-info {
+    font-size: 10px;
+    margin-top: 5px;
+    opacity: 0.8;
+    max-width: 300px;
+    word-wrap: break-word;
+}
+
+.sensor-info.clickable {
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.compass-info {
+    text-align: center;
+    margin-top: 10px;
+    font-size: 11px;
+    opacity: 0.7;
+    line-height: 1.3;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
