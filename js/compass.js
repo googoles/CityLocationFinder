@@ -18,6 +18,10 @@ let magnetometer = null;
 let gyroscope = null;
 let accelerometer = null;
 let sensorType = 'none';
+let useMotion = false;
+let lastMotionTimestamp = null;
+let orientationAlpha;
+
 
 // Device detection
 function detectDeviceType() {
@@ -48,37 +52,35 @@ function initializeDeviceOrientation() {
     detectDeviceType();
     
     if (!hasCompassCapability()) {
-        // Desktop/Laptop - no compass sensors
         updateSensorStatus(false, 'No compass sensors (Desktop/Laptop)', 'Compass sensors are not available on desktop/laptop devices. This feature works on smartphones and tablets.');
         return;
     }
     
-    // Mobile/Tablet - try to use compass sensors
     updateSensorStatus(false, 'Initializing sensors...', 'Detecting available sensors...');
     
-    // Try Generic Sensor API first (more accurate)
     if (tryGenericSensorAPI()) {
         return;
     }
     
-    // Fallback to DeviceOrientation API
     if ('DeviceOrientationEvent' in window) {
-        // Request permission for iOS 13+
-        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-            DeviceOrientationEvent.requestPermission()
-                .then(response => {
-                    if (response === 'granted') {
-                        startDeviceOrientationCompass();
-                    } else {
-                        updateSensorStatus(false, 'Permission denied', 'Compass permission was denied. Please allow sensor access in browser settings.');
-                    }
-                })
-                .catch((error) => {
-                    updateSensorStatus(false, 'Permission error', `Failed to request sensor permission: ${error.message}`);
-                });
+        if (typeof DeviceOrientationEvent.requestPermission === 'function' || typeof DeviceMotionEvent.requestPermission === 'function') {
+            Promise.all([
+                typeof DeviceOrientationEvent.requestPermission === 'function' ? DeviceOrientationEvent.requestPermission() : Promise.resolve('granted'),
+                typeof DeviceMotionEvent.requestPermission === 'function' ? DeviceMotionEvent.requestPermission() : Promise.resolve('granted')
+            ]).then(responses => {
+                const orientationGranted = responses[0] === 'granted';
+                const motionGranted = responses[1] === 'granted';
+
+                if (orientationGranted) {
+                    startDeviceOrientationCompass(motionGranted);
+                } else {
+                    updateSensorStatus(false, 'Permission denied', 'Compass permission was denied. Please allow sensor access in browser settings.');
+                }
+            }).catch((error) => {
+                updateSensorStatus(false, 'Permission error', `Failed to request sensor permission: ${error.message}`);
+            });
         } else {
-            // For Android and older iOS
-            startDeviceOrientationCompass();
+            startDeviceOrientationCompass(true);
         }
     } else {
         updateSensorStatus(false, 'No orientation support', 'Device orientation sensors are not supported by this browser.');
@@ -151,6 +153,9 @@ function startAbsoluteOrientationSensor() {
 }
 
 function startMagnetometerGyroscope() {
+    let magHeading;
+    let lastTimestamp = null;
+
     // Initialize magnetometer for compass heading
     if ('Magnetometer' in window) {
         magnetometer = new Magnetometer({ 
@@ -171,9 +176,8 @@ function startMagnetometerGyroscope() {
 
         magnetometer.onreading = () => {
             // Calculate compass heading from magnetometer
-            const heading = Math.atan2(magnetometer.y, magnetometer.x) * 180 / Math.PI;
-            deviceOrientation = (360 + heading) % 360;
-            updateCompassRotation();
+            magHeading = Math.atan2(magnetometer.y, magnetometer.x) * 180 / Math.PI;
+            magHeading = (360 + magHeading) % 360;
         };
 
         magnetometer.start();
@@ -188,8 +192,6 @@ function startMagnetometerGyroscope() {
             referenceFrame: 'screen'
         });
 
-        let lastTimestamp = null;
-
         gyroscope.onerror = (event) => {
             console.log('Gyroscope error:', event.error);
             // Don't update status here as magnetometer might still work
@@ -199,12 +201,18 @@ function startMagnetometerGyroscope() {
             if (lastTimestamp) {
                 const dt = (gyroscope.timestamp - lastTimestamp) / 1000; // Convert to seconds
                 
-                // Integrate angular velocity to get rotation change
-                const deltaRotation = gyroscope.z * dt * 180 / Math.PI; // Convert rad/s to degrees
+                // Gyroscope's z-axis gives rotation in rad/s
+                const gyroRotation = gyroscope.z * dt * 180 / Math.PI; // Convert to degrees
                 
-                // Apply gyroscope smoothing to magnetometer reading
-                deviceOrientation = (deviceOrientation + deltaRotation) % 360;
-                if (deviceOrientation < 0) deviceOrientation += 360;
+                if (typeof magHeading === 'number') {
+                    const A = 0.95; // Complementary filter coefficient
+                    deviceOrientation = A * (deviceOrientation + gyroRotation) + (1 - A) * magHeading;
+                    deviceOrientation %= 360;
+                    if (deviceOrientation < 0) deviceOrientation += 360;
+                } else {
+                    // No magnetometer reading yet, just use gyro (will drift)
+                    deviceOrientation = (deviceOrientation + gyroRotation) % 360;
+                }
                 
                 updateCompassRotation();
             }
@@ -226,33 +234,66 @@ function tryMagnetometerGyroscope() {
     } catch (error) {
         console.log('Magnetometer/Gyroscope fallback failed:', error);
         // Final fallback to DeviceOrientation
-        startDeviceOrientationCompass();
+        startDeviceOrientationCompass(false);
     }
 }
 
-function startDeviceOrientationCompass() {
+function startDeviceOrientationCompass(motionGranted) {
     compassSupported = true;
-    sensorType = 'DeviceOrientation';
-    updateSensorStatus(true, 'Legacy orientation sensor', `Using DeviceOrientation API fallback. Device: ${detectDeviceType()}`);
-    
     window.addEventListener('deviceorientationabsolute', handleOrientation, true);
     window.addEventListener('deviceorientation', handleOrientation, true);
+
+    if (motionGranted && 'DeviceMotionEvent' in window) {
+        useMotion = true;
+        window.addEventListener('devicemotion', handleMotion, true);
+        sensorType = 'DeviceOrientation + Motion';
+        updateSensorStatus(true, 'Legacy sensor with Gyro', `Using DeviceOrientation and DeviceMotion for smoothing. Device: ${detectDeviceType()}`);
+    } else {
+        useMotion = false;
+        sensorType = 'DeviceOrientation';
+        updateSensorStatus(true, 'Legacy orientation sensor', `Using DeviceOrientation API fallback. Device: ${detectDeviceType()}`);
+    }
+}
+
+function handleMotion(event) {
+    if (event.rotationRate && typeof event.rotationRate.alpha === 'number') {
+        if (lastMotionTimestamp) {
+            const dt = (event.timeStamp - lastMotionTimestamp) / 1000; // seconds
+            // rotationRate.alpha is in degrees per second
+            const gyroRotation = event.rotationRate.alpha * dt;
+
+            if (typeof orientationAlpha === 'number') {
+                const A = 0.95; // Complementary filter coefficient
+                deviceOrientation = A * (deviceOrientation + gyroRotation) + (1 - A) * orientationAlpha;
+                deviceOrientation %= 360;
+                if (deviceOrientation < 0) deviceOrientation += 360;
+            } else {
+                // If no absolute orientation, just integrate gyro (will drift)
+                deviceOrientation = (deviceOrientation + gyroRotation) % 360;
+            }
+            updateCompassRotation();
+        }
+        lastMotionTimestamp = event.timeStamp;
+    }
 }
 
 function handleOrientation(event) {
     let compass = event.webkitCompassHeading || event.alpha;
     
     if (compass !== null && compass !== undefined) {
-        // Normalize compass heading
         if (event.webkitCompassHeading) {
-            // iOS returns compass heading directly
-            deviceOrientation = compass;
+            // iOS returns absolute compass heading
+            orientationAlpha = compass;
         } else {
-            // Android returns alpha, need to convert
-            deviceOrientation = 360 - compass;
+            // Android returns alpha relative to device orientation
+            orientationAlpha = 360 - compass;
         }
         
-        updateCompassRotation();
+        // If not using motion fusion, set orientation directly
+        if (!useMotion) {
+             deviceOrientation = orientationAlpha;
+             updateCompassRotation();
+        }
     }
 }
 
@@ -277,6 +318,7 @@ function stopAllSensors() {
     // Remove DeviceOrientation listeners
     window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
     window.removeEventListener('deviceorientation', handleOrientation, true);
+    window.removeEventListener('devicemotion', handleMotion, true);
 }
 
 function updateCompassRotation() {
