@@ -16,6 +16,7 @@ function updateUIText() {
     document.getElementById('label-distance').textContent = t.distance;
     document.getElementById('label-direction').textContent = t.direction;
     document.getElementById('locationBtn').textContent = t.getLocation;
+    document.getElementById('sensorsBtn').textContent = t.activateSensors;
     document.getElementById('status').textContent = t.statusInitial;
     document.getElementById('addCustomBtn').textContent = t.addCustom;
     document.getElementById('customLat').placeholder = t.latPlaceholder;

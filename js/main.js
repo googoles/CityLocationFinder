@@ -4,6 +4,7 @@ let targetBearing = null;
 let deviceOrientation = 0;
 let compassSupported = false;
 let debugInfo = {};
+let orientationInitialized = false;
 
 // Event listeners
 document.getElementById('countrySelect').addEventListener('change', updateCityOptions);
@@ -11,15 +12,7 @@ document.getElementById('citySelect').addEventListener('change', handleCitySelec
 
 // Initialize
 window.addEventListener('load', () => {
-    initializeCompass();
-    initializeDeviceOrientation();
     updateUIText();
-    
-    setTimeout(() => {
-        if (!userLocation) {
-            getLocation();
-        }
-    }, 1000);
 });
 
 // Clean up sensors when page unloads

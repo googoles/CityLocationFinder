@@ -1,3 +1,11 @@
+function activateSensors() {
+    if (!orientationInitialized) {
+        initializeCompass();
+        initializeDeviceOrientation();
+        orientationInitialized = true;
+    }
+}
+
 // Initialize compass with degree marks
 function initializeCompass() {
     const compassRing = document.getElementById('compassRing');
@@ -21,6 +29,7 @@ let sensorType = 'none';
 let useMotion = false;
 let lastMotionTimestamp = null;
 let orientationAlpha;
+let smoothedOrientation = 0;
 
 
 // Device detection
@@ -47,6 +56,23 @@ function hasCompassCapability() {
     return type === 'mobile' || type === 'tablet';
 }
 
+function setDeviceOrientation(newOrientation) {
+    deviceOrientation = newOrientation;
+
+    const smoothingFactor = 0.1;
+    let diff = deviceOrientation - smoothedOrientation;
+
+    // Handle wrap-around for circular values
+    if (diff > 180) diff -= 360;
+    if (diff < -180) diff += 360;
+
+    smoothedOrientation += diff * smoothingFactor;
+    smoothedOrientation %= 360;
+    if (smoothedOrientation < 0) smoothedOrientation += 360;
+
+    updateCompassRotation();
+}
+
 // Device orientation handling with Generic Sensor API
 function initializeDeviceOrientation() {
     detectDeviceType();
@@ -63,41 +89,25 @@ function initializeDeviceOrientation() {
     }
     
     // Fallback to legacy DeviceOrientation/DeviceMotionEvent
-    if ('DeviceOrientationEvent' in window) {
-        // This is the modern way for iOS 13+ and other privacy-conscious browsers
-        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-            DeviceOrientationEvent.requestPermission()
-                .then(orientationResponse => {
-                    if (orientationResponse === 'granted') {
-                        // Orientation permission granted, now check for motion
-                        if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                            DeviceMotionEvent.requestPermission()
-                                .then(motionResponse => {
-                                    // Start with motion permission status
-                                    startDeviceOrientationCompass(motionResponse === 'granted');
-                                })
-                                .catch(error => {
-                                    // Failed to get motion permission, start without it
-                                    console.error('DeviceMotionEvent.requestPermission error:', error);
-                                    startDeviceOrientationCompass(false);
-                                });
-                        } else {
-                            // Motion permission not needed
-                            startDeviceOrientationCompass(true);
-                        }
-                    } else {
-                        updateSensorStatus(false, 'Permission denied', 'Compass permission was denied.');
-                    }
-                })
-                .catch(error => {
-                    updateSensorStatus(false, 'Permission error', `Failed to request sensor permission: ${error.message}`);
-                });
-        } else {
-            // This is for Android and older iOS devices that don't need explicit permission requests
-            startDeviceOrientationCompass(true);
-        }
+    if ('DeviceOrientationEvent' in window && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        Promise.all([
+            DeviceOrientationEvent.requestPermission(),
+            DeviceMotionEvent.requestPermission()
+        ]).then(responses => {
+            const orientationGranted = responses[0] === 'granted';
+            const motionGranted = responses[1] === 'granted';
+
+            if (orientationGranted) {
+                startDeviceOrientationCompass(motionGranted);
+            } else {
+                updateSensorStatus(false, 'Permission denied', 'Compass permission was denied.');
+            }
+        }).catch(error => {
+            updateSensorStatus(false, 'Permission error', `Failed to request sensor permission: ${error.message}`);
+        });
     } else {
-        updateSensorStatus(false, 'No orientation support', 'Device orientation sensors are not supported by this browser.');
+        // For Android and older iOS devices that don't need explicit permission requests
+        startDeviceOrientationCompass(true);
     }
 }
 
@@ -156,14 +166,13 @@ function startAbsoluteOrientationSensor() {
         
         // Extract yaw (rotation around Z-axis) for compass heading
         const yaw = Math.atan2(rotationMatrix[1], rotationMatrix[0]) * 180 / Math.PI;
-        deviceOrientation = (360 - yaw) % 360;
-        
-        updateCompassRotation();
+        const newOrientation = (360 - yaw) % 360;
+        setDeviceOrientation(newOrientation);
 
         Object.assign(debugInfo, {
             source: 'AbsoluteOrientationSensor',
             yaw: yaw,
-            deviceOrientation: deviceOrientation,
+            deviceOrientation: newOrientation,
             quaternion: absoluteOrientationSensor.quaternion
         });
         updateDebugInfo();
@@ -203,8 +212,7 @@ function startMagnetometerGyroscope() {
 
             // If not using gyro, or if gyro hasn't started, update directly
             if (!gyroscope || lastTimestamp === null) {
-                deviceOrientation = magHeading;
-                updateCompassRotation();
+                setDeviceOrientation(magHeading);
             }
 
             Object.assign(debugInfo, {
@@ -241,24 +249,24 @@ function startMagnetometerGyroscope() {
                 // Gyroscope's z-axis gives rotation in rad/s
                 const gyroRotation = gyroscope.z * dt * 180 / Math.PI; // Convert to degrees
                 
+                let newOrientation;
                 if (typeof magHeading === 'number') {
                     const A = 0.95; // Complementary filter coefficient
-                    deviceOrientation = A * (deviceOrientation + gyroRotation) + (1 - A) * magHeading;
-                    deviceOrientation %= 360;
-                    if (deviceOrientation < 0) deviceOrientation += 360;
+                    newOrientation = A * (deviceOrientation + gyroRotation) + (1 - A) * magHeading;
+                    newOrientation %= 360;
+                    if (newOrientation < 0) newOrientation += 360;
                 } else {
                     // No magnetometer reading yet, just use gyro (will drift)
-                    deviceOrientation = (deviceOrientation + gyroRotation) % 360;
+                    newOrientation = (deviceOrientation + gyroRotation) % 360;
                 }
-                
-                updateCompassRotation();
+                setDeviceOrientation(newOrientation);
 
                 Object.assign(debugInfo, {
                     source_gyro: 'Gyroscope',
                     gyro_x: gyroscope.x,
                     gyro_y: gyroscope.y,
                     gyro_z: gyroscope.z,
-                    deviceOrientation: deviceOrientation
+                    deviceOrientation: newOrientation
                 });
                 updateDebugInfo();
             }
@@ -307,21 +315,22 @@ function handleMotion(event) {
             // rotationRate.alpha is in degrees per second
             const gyroRotation = event.rotationRate.alpha * dt;
 
+            let newOrientation;
             if (typeof orientationAlpha === 'number') {
                 const A = 0.95; // Complementary filter coefficient
-                deviceOrientation = A * (deviceOrientation + gyroRotation) + (1 - A) * orientationAlpha;
-                deviceOrientation %= 360;
-                if (deviceOrientation < 0) deviceOrientation += 360;
+                newOrientation = A * (deviceOrientation + gyroRotation) + (1 - A) * orientationAlpha;
+                newOrientation %= 360;
+                if (newOrientation < 0) newOrientation += 360;
             } else {
                 // If no absolute orientation, just integrate gyro (will drift)
-                deviceOrientation = (deviceOrientation + gyroRotation) % 360;
+                newOrientation = (deviceOrientation + gyroRotation) % 360;
             }
-            updateCompassRotation();
+            setDeviceOrientation(newOrientation);
 
             Object.assign(debugInfo, {
                 source_motion: 'DeviceMotionEvent',
                 rotationRate: event.rotationRate,
-                deviceOrientation: deviceOrientation
+                deviceOrientation: newOrientation
             });
             updateDebugInfo();
         }
@@ -359,8 +368,7 @@ function handleOrientation(event) {
         
         // If not using motion fusion, or if motion hasn't started, set orientation directly
         if (!useMotion || lastMotionTimestamp === null) {
-             deviceOrientation = orientationAlpha;
-             updateCompassRotation();
+             setDeviceOrientation(orientationAlpha);
         }
 
         updateOrientationDisplay(event.alpha, event.beta, event.gamma);
@@ -409,10 +417,10 @@ function updateCompassRotation() {
     const needle = document.getElementById('compassNeedle');
     
     // Rotate the entire compass face to match device orientation
-    compass.style.transform = `rotate(${-deviceOrientation}deg)`;
+    compass.style.transform = `rotate(${-smoothedOrientation}deg)`;
     
     // Keep the needle pointing north (compensate for compass rotation)
-    needle.style.transform = `translate(-50%, -100%) rotate(${deviceOrientation}deg)`;
+    needle.style.transform = `translate(-50%, -100%) rotate(${smoothedOrientation}deg)`;
     
     // Update target indicator if we have a target
     if (targetBearing !== null) {
@@ -426,7 +434,7 @@ function updateTargetIndicator() {
     if (targetBearing !== null) {
         targetIndicator.classList.add('active');
         // Calculate relative bearing considering device orientation
-        const relativeBearing = targetBearing + deviceOrientation;
+        const relativeBearing = targetBearing + smoothedOrientation;
         targetIndicator.style.transform = `translate(-50%, -100%) rotate(${relativeBearing}deg)`;
     } else {
         targetIndicator.classList.remove('active');
